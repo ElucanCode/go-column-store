@@ -7,3 +7,4 @@ run:
 
 clean:
 	rm ColumnStore
+	go mod tidy
