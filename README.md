@@ -8,5 +8,5 @@
 
 To start the program:
 ```shell
-$ make run
+$ make clean run
 ```
