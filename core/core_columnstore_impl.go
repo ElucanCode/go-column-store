@@ -2,6 +2,8 @@ package core
 
 import (
 	"encoding/csv"
+	"hash/fnv"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -97,3 +99,171 @@ func (cs *ColumnStore) GetRelation(relName string) Relationer {
 	}
 	return rel
 }
+
+func (cs *ColumnStore) NestedLoopJoin(leftRelation string, leftColumn AttrInfo, rightRelation string, rightColumn AttrInfo, comp Comparison) Relationer {
+    leftRel := cs.GetRelation(leftRelation)
+    rightRel := cs.GetRelation(rightRelation)
+
+    lc := leftRel.findColumn(leftColumn)
+    rc := rightRel.findColumn(rightColumn)
+
+    if leftRel.columns()[lc].Signature.Type != rightRel.columns()[rc].Signature.Type {
+        error_("Not matching types for nested loop join.")
+    }
+
+    var result *Relation = new(Relation)
+
+    // TODO
+
+    return result
+}
+
+func (cs *ColumnStore) HashJoin(leftRelation string, leftColumn AttrInfo, rightRelation string, rightColumn AttrInfo, comp Comparison) Relationer {
+    // Basic setup
+    leftRel := cs.GetRelation(leftRelation)
+    rightRel := cs.GetRelation(rightRelation)
+    lidx := leftRel.findColumn(leftColumn)
+    ridx := rightRel.findColumn(rightColumn)
+
+    if leftRel.columns()[lidx].Signature.Type != rightRel.columns()[ridx].Signature.Type {
+        error_("Not matching types for hash join.")
+    }
+
+    // Get the smaller relation
+    var firstRel, secondRel Relationer
+    var fidx, sidx int
+    var fsig, ssig AttrInfo
+    if leftRel.rowCount() < rightRel.rowCount() {
+        firstRel, secondRel = leftRel, rightRel
+        fidx, sidx = lidx, ridx
+        fsig, ssig = leftRel.columns()[lidx].Signature, rightRel.columns()[ridx].Signature
+    } else {
+        firstRel, secondRel = rightRel, leftRel
+        fidx, sidx = ridx, lidx
+        fsig, ssig = rightRel.columns()[ridx].Signature, leftRel.columns()[lidx].Signature
+    }
+
+    // create the hash table, the length should be done differently
+    var hashTable = make([][]int, firstRel.rowCount())
+    hash := hasher(fsig)
+    for i := 0; i < firstRel.rowCount(); i++ {
+        var hashed int
+        if fsig.Type == INT {
+            hashed = hash(firstRel.columns()[fidx].Data.([]int)[i])
+        } else if fsig.Type == FLOAT {
+            hashed = hash(firstRel.columns()[fidx].Data.([]float64)[i])
+        } else {
+            hashed = hash(firstRel.columns()[fidx].Data.([]string)[i])
+        }
+        hashed %= len(hashTable)
+        hashTable[hashed] = append(hashTable[hashed], i)
+    }
+
+    var result *Relation = new(Relation)
+    result.Name = "HashJoin"
+    result.Columns = make([]Column, len(firstRel.columns()) + len(secondRel.columns()))
+
+    // create columns
+    for i := 0; i < len(result.Columns); i++ {
+        if i < len(firstRel.columns()) {
+            result.Columns[i].Signature = firstRel.columns()[i].Signature
+            if i == fidx {
+                result.Columns[i].Signature.Name += " first"
+            }
+        } else {
+            i2 := i - len(firstRel.columns())
+            result.Columns[i].Signature = secondRel.columns()[i2].Signature
+            if i2 == sidx {
+                result.Columns[i].Signature.Name += " second"
+            }
+        }
+        if result.Columns[i].Signature.Type == INT {
+            result.Columns[i].Data = make([]int, 0)
+        } else if result.Columns[i].Signature.Type == FLOAT {
+            result.Columns[i].Data = make([]float64, 0)
+        } else {
+            result.Columns[i].Data = make([]string, 0)
+        }
+    }
+
+    join := func (firstIndex, secondIndex int) {
+        for i := 0; i < len(result.Columns); i++ {
+            if i < len(firstRel.columns()) {
+                if result.Columns[i].Signature.Type == INT {
+                    result.Columns[i].Data = append(result.Columns[i].Data.([]int), firstRel.columns()[i].Data.([]int)[firstIndex])
+                } else if result.Columns[i].Signature.Type == FLOAT {
+                    result.Columns[i].Data = append(result.Columns[i].Data.([]float64), firstRel.columns()[i].Data.([]float64)[firstIndex])
+                } else {
+                    result.Columns[i].Data = append(result.Columns[i].Data.([]string), firstRel.columns()[i].Data.([]string)[firstIndex])
+                }
+            } else {
+                i2 := i - len(firstRel.columns())
+                if result.Columns[i].Signature.Type == INT {
+                    result.Columns[i].Data = append(result.Columns[i].Data.([]int), secondRel.columns()[i2].Data.([]int)[secondIndex])
+                } else if result.Columns[i].Signature.Type == FLOAT {
+                    result.Columns[i].Data = append(result.Columns[i].Data.([]float64), secondRel.columns()[i2].Data.([]float64)[secondIndex])
+                } else {
+                    result.Columns[i].Data = append(result.Columns[i].Data.([]string), secondRel.columns()[i2].Data.([]string)[secondIndex])
+                }
+            }
+        }
+    }
+
+    for i := 0; i < secondRel.rowCount(); i++ {
+        var hashed int
+        if ssig.Type == INT {
+            hashed = hash(secondRel.columns()[sidx].Data.([]int)[i])
+        } else if ssig.Type == FLOAT {
+            hashed = hash(secondRel.columns()[sidx].Data.([]float64)[i])
+        } else {
+            hashed = hash(secondRel.columns()[sidx].Data.([]string)[i])
+        }
+        hashed %= len(hashTable)
+        for _, j := range hashTable[hashed] {
+            if fsig.Type == INT {
+                predicate := comparator(comp, firstRel.columns()[fidx].Data.([]int)[j])
+                if predicate(secondRel.columns()[sidx].Data.([]int)[i]) {
+                    join(j, i)
+                }
+            } else if fsig.Type == FLOAT {
+                predicate := comparator(comp, firstRel.columns()[fidx].Data.([]float64)[j])
+                if predicate(secondRel.columns()[sidx].Data.([]float64)[i]) {
+                    join(j, i)
+                }
+            } else {
+                predicate := comparator(comp, firstRel.columns()[fidx].Data.([]string)[j])
+                if predicate(secondRel.columns()[sidx].Data.([]string)[i]) {
+                    join(j, i)
+                }
+            }
+        }
+    }
+
+    return result
+}
+
+/*
+-------------------------------------------------
+ColumnStore intern helper functions
+-------------------------------------------------
+*/
+
+func hasher(info AttrInfo) func(interface{}) int {
+    switch info.Type {
+    case INT:
+        return func(in interface{}) int {
+            return asInt(in)
+        }
+    case FLOAT:
+        return func(in interface{}) int {
+            return asInt(math.Ceil(asFloat(in)))
+        }
+    default:
+        return func(in interface{}) int {
+            h := fnv.New64a()
+            h.Write([]byte(asString(in)))
+            return asInt(h.Sum64())
+        }
+    }
+}
+

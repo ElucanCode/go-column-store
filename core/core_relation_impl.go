@@ -70,12 +70,6 @@ func (rel *Relation) columns() []Column {
 	return rel.Columns
 }
 
-/*
--------------------------------------------------
-Relation intern helper functions
--------------------------------------------------
-*/
-
 // Returns the index of the column with the passed name.
 func (rel *Relation) findColumn(attr AttrInfo) int {
 	for idx, col := range rel.Columns {
@@ -86,7 +80,7 @@ func (rel *Relation) findColumn(attr AttrInfo) int {
 	return -1
 }
 
-func (rel *Relation) getRowCount() int {
+func (rel *Relation) rowCount() int {
 	if rel.Columns[0].Signature.Type == INT {
 		return len(rel.Columns[0].Data.([]int))
 	} else if rel.Columns[0].Signature.Type == FLOAT {
@@ -95,6 +89,12 @@ func (rel *Relation) getRowCount() int {
 		return len(rel.Columns[0].Data.([]string))
 	}
 }
+
+/*
+-------------------------------------------------
+Relation intern helper functions
+-------------------------------------------------
+*/
 
 // Helper for getting the column names
 func (rel *Relation) getHeader() table.Row {
@@ -116,7 +116,7 @@ func (rel *Relation) getRows() []table.Row {
 		return make([]table.Row, 0)
 	}
 
-	row_num := rel.getRowCount()
+	row_num := rel.rowCount()
 	rows := make([]table.Row, row_num)
 
 	// iterate for each row
