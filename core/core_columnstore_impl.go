@@ -101,21 +101,37 @@ func (cs *ColumnStore) GetRelation(relName string) Relationer {
 }
 
 func (cs *ColumnStore) NestedLoopJoin(leftRelation string, leftColumn AttrInfo, rightRelation string, rightColumn AttrInfo, comp Comparison) Relationer {
+    // Basic setup
     leftRel := cs.GetRelation(leftRelation)
     rightRel := cs.GetRelation(rightRelation)
-
     lidx := leftRel.findColumn(leftColumn)
     ridx := rightRel.findColumn(rightColumn)
+    lsig := leftRel.columns()[lidx].Signature
 
-    if leftRel.columns()[lidx].Signature.Type != rightRel.columns()[ridx].Signature.Type {
+    if lsig.Type != rightRel.columns()[ridx].Signature.Type {
         error_("Not matching types for nested loop join.")
     }
 
     result := prepareJoinResult("NestedLoopJoin", leftRel, rightRel, lidx, ridx)
 
+    // Perform the join
     for i := 0; i < leftRel.rowCount(); i++ {
+        var predicate interface{}
+        if lsig.Type == INT {
+            predicate = comparator(comp, leftRel.columns()[lidx].Data.([]int)[i])
+        } else if lsig.Type == FLOAT {
+            predicate = comparator(comp, leftRel.columns()[lidx].Data.([]float64)[i])
+        } else {
+            predicate = comparator(comp, leftRel.columns()[lidx].Data.([]string)[i])
+        }
         for j := 0; j < rightRel.rowCount(); j++ {
-
+            if lsig.Type == INT && predicate.(func(int) bool)(rightRel.columns()[ridx].Data.([]int)[j]) {
+                join(leftRel, rightRel, result, i, j)
+            } else if lsig.Type == FLOAT && predicate.(func(float64) bool)(rightRel.columns()[ridx].Data.([]float64)[j]) {
+                join(leftRel, rightRel, result, i, j)
+            } else if lsig.Type == STRING && predicate.(func(string) bool)(rightRel.columns()[ridx].Data.([]string)[j]) {
+                join(leftRel, rightRel, result, i, j)
+            }
         }
     }
 
@@ -149,7 +165,7 @@ func (cs *ColumnStore) HashJoin(leftRelation string, leftColumn AttrInfo, rightR
 
     // create the hash table, the length should be done differently
     var hashTable = make([][]int, firstRel.rowCount())
-    hash := hasher(fsig)
+    hash := createHashFunction(fsig)
     for i := 0; i < firstRel.rowCount(); i++ {
         var hashed int
         if fsig.Type == INT {
@@ -165,6 +181,7 @@ func (cs *ColumnStore) HashJoin(leftRelation string, leftColumn AttrInfo, rightR
 
     result := prepareJoinResult("HashJoin", firstRel, secondRel, fidx, sidx)
 
+    // Perform the join
     for i := 0; i < secondRel.rowCount(); i++ {
         var hashed int
         if ssig.Type == INT {
@@ -204,7 +221,7 @@ ColumnStore intern helper functions
 -------------------------------------------------
 */
 
-func hasher(info AttrInfo) func(interface{}) int {
+func createHashFunction(info AttrInfo) func(interface{}) int {
     switch info.Type {
     case INT:
         return func(in interface{}) int {
@@ -212,7 +229,7 @@ func hasher(info AttrInfo) func(interface{}) int {
         }
     case FLOAT:
         return func(in interface{}) int {
-            return asInt(math.Ceil(asFloat(in)))
+            return asInt(math.Round(asFloat(in)))
         }
     default:
         return func(in interface{}) int {
