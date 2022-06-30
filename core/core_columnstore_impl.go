@@ -175,7 +175,7 @@ func (cs *ColumnStore) HashJoin(leftRelation string, leftColumn AttrInfo, rightR
         } else {
             hashed = hash(firstRel.columns()[fidx].Data.([]string)[i])
         }
-        hashed %= len(hashTable)
+        hashed = abs(hashed % len(hashTable))
         hashTable[hashed] = append(hashTable[hashed], i)
     }
 
@@ -191,7 +191,7 @@ func (cs *ColumnStore) HashJoin(leftRelation string, leftColumn AttrInfo, rightR
         } else {
             hashed = hash(secondRel.columns()[sidx].Data.([]string)[i])
         }
-        hashed %= len(hashTable)
+        hashed = abs(hashed % len(hashTable))
         for _, j := range hashTable[hashed] {
             if fsig.Type == INT {
                 predicate := comparator(comp, firstRel.columns()[fidx].Data.([]int)[j])
@@ -229,13 +229,13 @@ func createHashFunction(info AttrInfo) func(interface{}) int {
         }
     case FLOAT:
         return func(in interface{}) int {
-            return asInt(math.Round(asFloat(in)))
+            return int(math.Round(asFloat(in)))
         }
     default:
         return func(in interface{}) int {
             h := fnv.New64a()
             h.Write([]byte(asString(in)))
-            return asInt(h.Sum64())
+            return int(h.Sum64())
         }
     }
 }
@@ -251,13 +251,13 @@ func prepareJoinResult(name string, first, second Relationer, fidx, sidx int) Re
         if i < len(first.columns()) {
             result.Columns[i].Signature = first.columns()[i].Signature
             if i == fidx {
-                result.Columns[i].Signature.Name += " first"
+                result.Columns[i].Signature.Name += " (first)"
             }
         } else {
             i2 := i - len(first.columns())
             result.Columns[i].Signature = second.columns()[i2].Signature
             if i2 == sidx {
-                result.Columns[i].Signature.Name += " second"
+                result.Columns[i].Signature.Name += " (second)"
             }
         }
         if result.Columns[i].Signature.Type == INT {

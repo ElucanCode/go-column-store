@@ -126,3 +126,10 @@ func allMatch[T any](array []T, predicate func(T) bool) bool {
 	}
 	return true
 }
+
+func abs(x int) int {
+    if x < 0 {
+        return -x
+    }
+    return x
+}

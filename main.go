@@ -10,7 +10,7 @@ func main() {
 
 	students_rel := cs.Load("students.csv", ',')
 
-	fmt.Println("Ganze Relation")
+	fmt.Println("Ganze Studenten-Relation")
 	students_rel.Print()
 
 	fmt.Println("ID, Durchschnitt und Nachname")
@@ -41,6 +41,23 @@ func main() {
 		Select(core.AttrInfo{Name: "Alter"}, core.LE, 24).
 		Scan([]core.AttrInfo{{Name: "ID"}, {Name: "Nachname"}, {Name: "Vorname"}}).
 		Print()
+
+    fmt.Println("Ganze Noten Relation")
+    cs.Load("noten.csv", ',').Print()
+
+    fmt.Println("Studenten, bei denen die Noten aufgerundet wurden (HashJoin)")
+    cs.HashJoin("students", core.AttrInfo{Name: "Durchschnitt"}, "noten", core.AttrInfo{Name: "Note"}, core.LE).
+        Scan([]core.AttrInfo{{Name: "ID"}, {Name: "Vorname"}, {Name: "Nachname"}, {Name: "Beschreibung"}}).
+        Print()
+
+    fmt.Println("Häufige Namen")
+    cs.Load("haeufige_namen.csv", ',').Print()
+
+    fmt.Println("Studenten mit häufigen namen (NestedLoopJoin)")
+    cs.NestedLoopJoin("students", core.AttrInfo{Name: "Vorname"}, "haeufige_namen", core.AttrInfo{Name: "Vorname"}, core.EQ).Print()
+
+    fmt.Println("Studenten mit häufigen namen (HashJoin)")
+    cs.HashJoin("students", core.AttrInfo{Name: "Vorname"}, "haeufige_namen", core.AttrInfo{Name: "Vorname"}, core.EQ).Print()
 
     fmt.Println("============================================================")
 
