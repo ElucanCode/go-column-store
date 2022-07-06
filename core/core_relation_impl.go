@@ -66,6 +66,16 @@ func (rel *Relation) Print() {
 	t.Render()
 }
 
+func (rel *Relation) MakeIndex(indexCol AttrInfo) Relationer {
+
+    return nil
+}
+
+func (rel *Relation) IndexScan(key interface{}) Relationer {
+
+    return nil
+}
+
 func (rel *Relation) columns() []Column {
 	return rel.Columns
 }

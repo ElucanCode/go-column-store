@@ -71,6 +71,8 @@ type Relationer interface {
 	Scan(colList []AttrInfo) Relationer
 	Select(col AttrInfo, comp Comparison, compVal interface{}) Relationer
 	Print()
+    MakeIndex(indexCol AttrInfo) Relationer
+    IndexScan(key interface{}) Relationer
 	// Package intern possibility to get the columns from a Relationer
 	columns() []Column
     // Package intern helper to get the index of a specific column
@@ -110,6 +112,8 @@ type ColumnStorer interface {
 	GetRelation(relName string) Relationer
 
     NestedLoopJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer
+
+    IndexNestedLoopJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer
 
 	HashJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer
 }

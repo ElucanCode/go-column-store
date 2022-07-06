@@ -138,6 +138,10 @@ func (cs *ColumnStore) NestedLoopJoin(leftRelation string, leftColumn AttrInfo, 
     return &result
 }
 
+func (cs *ColumnStore) IndexNestedLoopJoin(leftRelation string, leftColumn AttrInfo, rightRelation string, rightColumn AttrInfo, comp Comparison) Relationer {
+
+    return nil
+}
 func (cs *ColumnStore) HashJoin(leftRelation string, leftColumn AttrInfo, rightRelation string, rightColumn AttrInfo, comp Comparison) Relationer {
     // Basic setup
     leftRel := cs.GetRelation(leftRelation)
