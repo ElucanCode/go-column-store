@@ -117,3 +117,17 @@ type ColumnStorer interface {
 
 	HashJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer
 }
+
+type Index struct {
+    root        IndexNode
+    m           int
+}
+
+type IndexNode struct {
+    keys        []interface{}
+    children    []IndexNode
+    root        *IndexNode
+    m           int
+    n           int
+    isLeaf      bool
+}
