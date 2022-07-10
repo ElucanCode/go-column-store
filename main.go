@@ -65,8 +65,14 @@ func main() {
     cs.Load("test2.csv", ',')
     cs.HashJoin("test1", core.AttrInfo{Name:"ID"}, "test2", core.AttrInfo{Name:"ID"}, core.EQ).Print()
     cs.NestedLoopJoin("test1", core.AttrInfo{Name:"ID"}, "test2", core.AttrInfo{Name:"ID"}, core.EQ).Print()
+    cs.IndexNestedLoopJoin("test1", core.AttrInfo{Name:"ID"}, "test2", core.AttrInfo{Name: "ID"}).Print()
 
     fmt.Println("============================================================")
 
     students_rel.MakeIndex(core.AttrInfo{Name: "Alter"}).IndexScan(core.AttrInfo{Name: "Alter"}, 19).Print()
+    cs.HashJoin("students", core.AttrInfo{Name: "Durchschnitt"}, "noten", core.AttrInfo{Name: "Note"}, core.LE).
+        Scan([]core.AttrInfo{{Name: "ID"}, {Name: "Vorname"}, {Name: "Nachname"}, {Name: "Beschreibung"}}).
+        MakeIndex(core.AttrInfo{Name: "Beschreibung"}).
+        IndexScan(core.AttrInfo{Name: "Beschreibung"}, "gut").
+        Print()
 }

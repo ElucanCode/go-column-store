@@ -138,33 +138,6 @@ func (cs *ColumnStore) NestedLoopJoin(leftRelation string, leftColumn AttrInfo, 
     return &result
 }
 
-func (cs *ColumnStore) IndexNestedLoopJoin(leftRelation string, leftColumn AttrInfo, rightRelation string, rightColumn AttrInfo, comp Comparison) Relationer {
-    leftRel := cs.GetRelation(leftRelation)
-    rightRel := cs.GetRelation(rightRelation)
-    lidx := leftRel.findColumn(leftColumn)
-    ridx := rightRel.findColumn(rightColumn)
-    lsig := leftRel.columns()[lidx].Signature
-
-    if lsig.Type != rightRel.columns()[ridx].Signature.Type {
-        error_("Not matching types for Index nested loop join.")
-    }
-
-    // result := prepareJoinResult("IndexNestedLoopJoin", leftRel, rightRel, lidx, ridx)
-
-    for i := 0; i < leftRel.rowCount(); i++ {
-        // var predicate interface{}
-        // if lsig.Type == INT {
-        //     predicate = comparator(comp, leftRel.columns()[lidx].Data.([]int)[i])
-        // } else if lsig.Type == FLOAT {
-        //     predicate = comparator(comp, leftRel.columns()[lidx].Data.([]float64)[i])
-        // } else {
-        //     predicate = comparator(comp, leftRel.columns()[lidx].Data.([]string)[i])
-        // }
-    } 
-
-    return nil
-}
-
 func (cs *ColumnStore) HashJoin(leftRelation string, leftColumn AttrInfo, rightRelation string, rightColumn AttrInfo, comp Comparison) Relationer {
     // Basic setup
     leftRel := cs.GetRelation(leftRelation)
@@ -238,6 +211,38 @@ func (cs *ColumnStore) HashJoin(leftRelation string, leftColumn AttrInfo, rightR
             }
         }
     }
+
+    return &result
+}
+
+func (cs *ColumnStore) IndexNestedLoopJoin(leftRelation string, leftColumn AttrInfo, rightRelation string, rightColumn AttrInfo) Relationer {
+    leftRel := cs.GetRelation(leftRelation)
+    rightRel := cs.GetRelation(rightRelation)
+    lidx := leftRel.findColumn(leftColumn)
+    ridx := rightRel.findColumn(rightColumn)
+    lsig := leftRel.columns()[lidx].Signature
+
+    if lsig.Type != rightRel.columns()[ridx].Signature.Type {
+        error_("Not matching types for Index nested loop join.")
+    }
+
+    rightRel.MakeIndex(rightColumn)
+
+    result := prepareJoinResult("IndexNestedLoopJoin", leftRel, rightRel, lidx, ridx)
+
+    for i := 0; i < leftRel.rowCount(); i++ {
+        var value interface{}
+        if lsig.Type == INT {
+            value = leftRel.columns()[lidx].Data.([]int)[i]
+        } else if lsig.Type == FLOAT {
+            value = leftRel.columns()[lidx].Data.([]float64)[i]
+        } else {
+            value = leftRel.columns()[lidx].Data.([]string)[i]
+        }
+        for _, row := range rightRel.columns()[ridx].index.Find(value) {
+            join(leftRel, rightRel, result, i, row)
+        }
+    } 
 
     return &result
 }
