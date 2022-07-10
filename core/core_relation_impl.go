@@ -3,7 +3,6 @@ package core
 import (
 	"os"
 
-	"github.com/collinglass/bptree"         // using the b+ tree
 	"github.com/jedib0t/go-pretty/v6/table" // rendering of tables
 	"github.com/jedib0t/go-pretty/v6/text"  // customization of text inside the tables
 )
@@ -68,36 +67,72 @@ func (rel *Relation) Print() {
 }
 
 func (rel *Relation) MakeIndex(indexCol AttrInfo) Relationer {
-	tree := bptree.NewTree()
-	colum_Index := rel.findColumn(indexCol)
-	colsig := rel.columns()[colum_Index].Signature
-	for i, r := range rel.Columns[colum_Index].Data {
-		if colsig.Type == INT && (rel.columns()[colum_Index].Data.([]int)[i]) {
-			tree.Insert(r, i)
-		} else if colsig.Type == FLOAT && (rel.columns()[colum_Index].Data.([]float64)[i]) {
-			tree.Insert(r, i)
-		} else if colsig.Type == STRING && (rel.columns()[colum_Index].Data.([]string)[i]) {
-			tree.Insert(r, i)
+	colIdx := rel.findColumn(indexCol)
+
+    if colIdx == -1 {
+        error_("Unknown column name ", indexCol.Name)
+    }
+
+    if rel.columns()[colIdx].index != nil {
+        return rel
+    }
+
+	colsig := rel.columns()[colIdx].Signature
+    rel.Columns[colIdx].index = NewIndex()
+
+    for i := 0; i < rel.rowCount(); i++ {
+		if colsig.Type == INT {
+            data := rel.Columns[colIdx].Data.([]int)[i]
+            rel.Columns[colIdx].index.Insert(data, i)
+		} else if colsig.Type == FLOAT {
+            data := rel.Columns[colIdx].Data.([]float64)[i]
+            rel.Columns[colIdx].index.Insert(data, i)
+		} else if colsig.Type == STRING {
+            data := rel.Columns[colIdx].Data.([]string)[i]
+            rel.Columns[colIdx].index.Insert(data, i)
 		}
-	}
-	rel.index = tree
+    }
 	return rel
 }
 
-func (rel *Relation) IndexScan(key interface{}) Relationer {
-	bptree.Tree.Find(key, false)
-	var rs *Relation = new(Relation)
+func (rel *Relation) IndexScan(col AttrInfo, key interface{}) Relationer {
+    colIdx := rel.findColumn(col)
 
-	// for _, sig := range rel. {
-	var col_idx = rel.findColumn(sig)
-	if col_idx != -1 {
-		rs.Columns = append(rs.Columns, rel.Columns[col_idx])
-	} else {
-		warn("Unable to find column '%s'; skipping this column.", sig.Name)
-	}
+    if colIdx == -1 {
+        error_("Unknown column name ", col.Name)
+    }
 
-	return rs
+    if rel.Columns[colIdx].index == nil {
+        rel.MakeIndex(col)
+    }
 
+    result := new(Relation)
+    result.Name = "IndexScan on " + rel.Name
+    result.Columns = make([]Column, len(rel.Columns))
+    for i := range result.Columns {
+        result.Columns[i].Signature = rel.columns()[i].Signature
+        if result.Columns[i].Signature.Type == INT {
+            result.Columns[i].Data = make([]int, 0)
+        } else if result.Columns[i].Signature.Type == FLOAT {
+            result.Columns[i].Data = make([]float64, 0)
+        } else if result.Columns[i].Signature.Type == STRING {
+            result.Columns[i].Data = make([]string, 0)
+        }
+    }
+
+    for _, rowIdx := range rel.Columns[colIdx].index.Find(key) {
+        for i := 0; i < len(result.Columns); i++ {
+            if rel.columns()[i].Signature.Type == INT {
+                result.Columns[i].Data = append(result.Columns[i].Data.([]int), rel.Columns[i].Data.([]int)[rowIdx])
+            } else if rel.columns()[i].Signature.Type == FLOAT {
+                result.Columns[i].Data = append(result.Columns[i].Data.([]float64), rel.Columns[i].Data.([]float64)[rowIdx])
+            } else if rel.columns()[i].Signature.Type == STRING {
+                result.Columns[i].Data = append(result.Columns[i].Data.([]string), rel.Columns[i].Data.([]string)[rowIdx])
+            }
+        }
+    }
+
+	return result
 }
 
 func (rel *Relation) columns() []Column {

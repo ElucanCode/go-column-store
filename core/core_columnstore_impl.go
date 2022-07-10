@@ -149,18 +149,18 @@ func (cs *ColumnStore) IndexNestedLoopJoin(leftRelation string, leftColumn AttrI
         error_("Not matching types for Index nested loop join.")
     }
 
-    result := prepareJoinResult("IndexNestedLoopJoin", leftRel, rightRel, lidx, ridx)
+    // result := prepareJoinResult("IndexNestedLoopJoin", leftRel, rightRel, lidx, ridx)
 
     for i := 0; i < leftRel.rowCount(); i++ {
-        var predicate interface{}
-        if lsig.Type == INT {
-            predicate = comparator(comp, leftRel.columns()[lidx].Data.([]int)[i])
-        } else if lsig.Type == FLOAT {
-            predicate = comparator(comp, leftRel.columns()[lidx].Data.([]float64)[i])
-        } else {
-            predicate = comparator(comp, leftRel.columns()[lidx].Data.([]string)[i])
-        }
-        
+        // var predicate interface{}
+        // if lsig.Type == INT {
+        //     predicate = comparator(comp, leftRel.columns()[lidx].Data.([]int)[i])
+        // } else if lsig.Type == FLOAT {
+        //     predicate = comparator(comp, leftRel.columns()[lidx].Data.([]float64)[i])
+        // } else {
+        //     predicate = comparator(comp, leftRel.columns()[lidx].Data.([]string)[i])
+        // }
+    } 
 
     return nil
 }

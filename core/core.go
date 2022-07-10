@@ -1,7 +1,5 @@
 package core
 
-import "github.com/collinglass/bptree"
-
 /*
 	The comparison operators for filter operators.
 */
@@ -54,6 +52,7 @@ type AttrInfo struct {
 type Column struct {
 	Signature AttrInfo
 	Data      interface{}
+	index     *Index
 }
 
 /*
@@ -63,7 +62,6 @@ type Column struct {
 type Relation struct {
 	Name    string
 	Columns []Column
-	index   bptree.Tree
 }
 
 /*
@@ -75,7 +73,7 @@ type Relationer interface {
 	Select(col AttrInfo, comp Comparison, compVal interface{}) Relationer
 	Print()
 	MakeIndex(indexCol AttrInfo) Relationer
-	IndexScan(key interface{}) Relationer
+	IndexScan(col AttrInfo, key interface{}) Relationer
 	// Package intern possibility to get the columns from a Relationer
 	columns() []Column
 	// Package intern helper to get the index of a specific column
@@ -119,4 +117,8 @@ type ColumnStorer interface {
 	IndexNestedLoopJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer
 
 	HashJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer
+}
+
+type Index struct {
+    entries map[interface{}][]int
 }
