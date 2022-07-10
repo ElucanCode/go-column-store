@@ -1,3 +1,3 @@
 package core
 
-func (idx *Index) Lookup(key interface{}) 
+func (idx *Index) Lookup(key interface{})

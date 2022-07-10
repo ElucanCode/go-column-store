@@ -1,5 +1,7 @@
 package core
 
+import "github.com/collinglass/bptree"
+
 /*
 	The comparison operators for filter operators.
 */
@@ -61,6 +63,7 @@ type Column struct {
 type Relation struct {
 	Name    string
 	Columns []Column
+	index   bptree.Tree
 }
 
 /*
@@ -71,14 +74,14 @@ type Relationer interface {
 	Scan(colList []AttrInfo) Relationer
 	Select(col AttrInfo, comp Comparison, compVal interface{}) Relationer
 	Print()
-    MakeIndex(indexCol AttrInfo) Relationer
-    IndexScan(key interface{}) Relationer
+	MakeIndex(indexCol AttrInfo) Relationer
+	IndexScan(key interface{}) Relationer
 	// Package intern possibility to get the columns from a Relationer
 	columns() []Column
-    // Package intern helper to get the index of a specific column
-    findColumn(col AttrInfo) int
-    // Package intern helper to get the number of rows
-    rowCount() int
+	// Package intern helper to get the index of a specific column
+	findColumn(col AttrInfo) int
+	// Package intern helper to get the number of rows
+	rowCount() int
 }
 
 /*
@@ -111,23 +114,9 @@ type ColumnStorer interface {
 	*/
 	GetRelation(relName string) Relationer
 
-    NestedLoopJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer
+	NestedLoopJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer
 
-    IndexNestedLoopJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer
+	IndexNestedLoopJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer
 
 	HashJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer
-}
-
-type Index struct {
-    root        IndexNode
-    m           int
-}
-
-type IndexNode struct {
-    keys        []interface{}
-    children    []IndexNode
-    root        *IndexNode
-    m           int
-    n           int
-    isLeaf      bool
 }
