@@ -238,7 +238,7 @@ func (cs *ColumnStore) IndexNestedLoopJoin(leftRelation string, leftColumn AttrI
         } else {
             value = leftRel.columns()[lidx].Data.([]string)[i]
         }
-        for _, row := range rightRel.columns()[ridx].index.Find(value) {
+        for _, row := range rightRel.columns()[ridx].IndexLookup(value) {
             join(leftRel, rightRel, result, i, row)
         }
     } 

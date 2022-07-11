@@ -39,7 +39,7 @@ type AttrInfo struct {
 type Column struct {
 	Signature AttrInfo
 	Data      interface{}
-	index     *Index
+	Index     map[interface{}][]int
 }
 
 /*
@@ -104,8 +104,4 @@ type ColumnStorer interface {
 	IndexNestedLoopJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo) Relationer
 
 	HashJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer
-}
-
-type Index struct {
-    entries map[interface{}][]int
 }

@@ -7,6 +7,27 @@ import (
 	"github.com/jedib0t/go-pretty/v6/text"  // customization of text inside the tables
 )
 
+func (col *Column) CreateIndex() bool {
+    if col.Index != nil {
+        return false
+    }
+    col.Index = make(map[interface{}][]int)
+    return true
+}
+
+func (col *Column) IndexInsert(key interface{}, i int) {
+    if col.Index[key] == nil {
+        col.Index[key] = make([]int, 1)
+        col.Index[key][0] = i
+    } else {
+        col.Index[key] = append(col.Index[key], i)
+    }
+}
+
+func (col *Column) IndexLookup(key interface{}) []int {
+    return col.Index[key]
+}
+
 func (rel *Relation) Scan(colList []AttrInfo) Relationer {
 	var rs *Relation = new(Relation)
 
@@ -73,23 +94,22 @@ func (rel *Relation) MakeIndex(indexCol AttrInfo) Relationer {
         error_("Unknown column name ", indexCol.Name)
     }
 
-    if rel.columns()[colIdx].index != nil {
+    if !rel.columns()[colIdx].CreateIndex() {
         return rel
     }
 
 	colsig := rel.columns()[colIdx].Signature
-    rel.Columns[colIdx].index = NewIndex()
 
     for i := 0; i < rel.rowCount(); i++ {
 		if colsig.Type == INT {
             data := rel.Columns[colIdx].Data.([]int)[i]
-            rel.Columns[colIdx].index.Insert(data, i)
+            rel.Columns[colIdx].IndexInsert(data, i)
 		} else if colsig.Type == FLOAT {
             data := rel.Columns[colIdx].Data.([]float64)[i]
-            rel.Columns[colIdx].index.Insert(data, i)
+            rel.Columns[colIdx].IndexInsert(data, i)
 		} else if colsig.Type == STRING {
             data := rel.Columns[colIdx].Data.([]string)[i]
-            rel.Columns[colIdx].index.Insert(data, i)
+            rel.Columns[colIdx].IndexInsert(data, i)
 		}
     }
 	return rel
@@ -102,9 +122,7 @@ func (rel *Relation) IndexScan(col AttrInfo, key interface{}) Relationer {
         error_("Unknown column name ", col.Name)
     }
 
-    if rel.Columns[colIdx].index == nil {
-        rel.MakeIndex(col)
-    }
+    rel.Columns[colIdx].CreateIndex()
 
     result := new(Relation)
     result.Name = "IndexScan on " + rel.Name
@@ -120,7 +138,7 @@ func (rel *Relation) IndexScan(col AttrInfo, key interface{}) Relationer {
         }
     }
 
-    for _, rowIdx := range rel.Columns[colIdx].index.Find(key) {
+    for _, rowIdx := range rel.Columns[colIdx].IndexLookup(key) {
         for i := 0; i < len(result.Columns); i++ {
             if rel.columns()[i].Signature.Type == INT {
                 result.Columns[i].Data = append(result.Columns[i].Data.([]int), rel.Columns[i].Data.([]int)[rowIdx])
