@@ -104,4 +104,6 @@ type ColumnStorer interface {
 	IndexNestedLoopJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo) Relationer
 
 	HashJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer
+
+    ParallelHashJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer
 }

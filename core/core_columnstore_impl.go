@@ -137,7 +137,99 @@ func (cs *ColumnStore) NestedLoopJoin(leftRelation string, leftColumn AttrInfo, 
     return &result
 }
 
+func (cs *ColumnStore) IndexNestedLoopJoin(leftRelation string, leftColumn AttrInfo, rightRelation string, rightColumn AttrInfo) Relationer {
+    leftRel := cs.GetRelation(leftRelation)
+    rightRel := cs.GetRelation(rightRelation)
+    lidx := leftRel.findColumn(leftColumn)
+    ridx := rightRel.findColumn(rightColumn)
+    lsig := leftRel.columns()[lidx].Signature
+
+    if lsig.Type != rightRel.columns()[ridx].Signature.Type {
+        error_("Not matching types for Index nested loop join.")
+    }
+
+    rightRel.MakeIndex(rightColumn)
+
+    result := prepareJoinResult("IndexNestedLoopJoin", leftRel, rightRel, lidx, ridx)
+
+    for i := 0; i < leftRel.rowCount(); i++ {
+        var value interface{}
+        if lsig.Type == INT {
+            value = leftRel.columns()[lidx].Data.([]int)[i]
+        } else if lsig.Type == FLOAT {
+            value = leftRel.columns()[lidx].Data.([]float64)[i]
+        } else {
+            value = leftRel.columns()[lidx].Data.([]string)[i]
+        }
+        for _, row := range rightRel.columns()[ridx].IndexLookup(value) {
+            join(leftRel, rightRel, result, i, row)
+        }
+    } 
+
+    return &result
+}
+
 func (cs *ColumnStore) HashJoin(leftRelation string, leftColumn AttrInfo, rightRelation string, rightColumn AttrInfo, comp Comparison) Relationer {
+    s := cs.hashJoinSetup(leftRelation, leftColumn, rightRelation, rightColumn, "HashJoin")
+
+    // Perform the join
+    for i := 0; i < s.secondRel.rowCount(); i++ {
+        var hashed int
+        if s.ssig.Type == INT {
+            hashed = s.hash(s.secondRel.columns()[s.sidx].Data.([]int)[i])
+        } else if s.ssig.Type == FLOAT {
+            hashed = s.hash(s.secondRel.columns()[s.sidx].Data.([]float64)[i])
+        } else {
+            hashed = s.hash(s.secondRel.columns()[s.sidx].Data.([]string)[i])
+        }
+        hashed = abs(hashed % len(s.hashTable))
+        for _, j := range s.hashTable[hashed] {
+            if s.fsig.Type == INT {
+                predicate := comparator(comp, s.firstRel.columns()[s.fidx].Data.([]int)[j])
+                if predicate(s.secondRel.columns()[s.sidx].Data.([]int)[i]) {
+                    join(s.firstRel, s.secondRel, s.result, j, i)
+                }
+            } else if s.fsig.Type == FLOAT {
+                predicate := comparator(comp, s.firstRel.columns()[s.fidx].Data.([]float64)[j])
+                if predicate(s.secondRel.columns()[s.sidx].Data.([]float64)[i]) {
+                    join(s.firstRel, s.secondRel, s.result, j, i)
+                }
+            } else {
+                predicate := comparator(comp, s.firstRel.columns()[s.fidx].Data.([]string)[j])
+                if predicate(s.secondRel.columns()[s.sidx].Data.([]string)[i]) {
+                    join(s.firstRel, s.secondRel, s.result, j, i)
+                }
+            }
+        }
+    }
+
+    return &s.result
+}
+
+func (cs *ColumnStore) ParallelHashJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer {
+    // s := cs.hashJoinSetup(leftRelation, leftCol, rightRelation, rightCol, "ParallelHashJoin")
+    return nil
+}
+
+/*
+-------------------------------------------------
+ColumnStore intern helper functions
+-------------------------------------------------
+*/
+
+type setup struct {
+    firstRel    Relationer
+    secondRel   Relationer
+    result      Relation
+    hash        func(interface{}) int
+    hashTable   [][]int
+    fidx        int
+    sidx        int
+    fsig        AttrInfo
+    ssig        AttrInfo
+}
+
+func (cs *ColumnStore) hashJoinSetup(leftRelation string, leftColumn AttrInfo, rightRelation string, rightColumn AttrInfo, resultName string) setup {
     // Basic setup
     leftRel := cs.GetRelation(leftRelation)
     rightRel := cs.GetRelation(rightRelation)
@@ -178,79 +270,19 @@ func (cs *ColumnStore) HashJoin(leftRelation string, leftColumn AttrInfo, rightR
         hashTable[hashed] = append(hashTable[hashed], i)
     }
 
-    result := prepareJoinResult("HashJoin", firstRel, secondRel, fidx, sidx)
-
-    // Perform the join
-    for i := 0; i < secondRel.rowCount(); i++ {
-        var hashed int
-        if ssig.Type == INT {
-            hashed = hash(secondRel.columns()[sidx].Data.([]int)[i])
-        } else if ssig.Type == FLOAT {
-            hashed = hash(secondRel.columns()[sidx].Data.([]float64)[i])
-        } else {
-            hashed = hash(secondRel.columns()[sidx].Data.([]string)[i])
-        }
-        hashed = abs(hashed % len(hashTable))
-        for _, j := range hashTable[hashed] {
-            if fsig.Type == INT {
-                predicate := comparator(comp, firstRel.columns()[fidx].Data.([]int)[j])
-                if predicate(secondRel.columns()[sidx].Data.([]int)[i]) {
-                    join(firstRel, secondRel, result, j, i)
-                }
-            } else if fsig.Type == FLOAT {
-                predicate := comparator(comp, firstRel.columns()[fidx].Data.([]float64)[j])
-                if predicate(secondRel.columns()[sidx].Data.([]float64)[i]) {
-                    join(firstRel, secondRel, result, j, i)
-                }
-            } else {
-                predicate := comparator(comp, firstRel.columns()[fidx].Data.([]string)[j])
-                if predicate(secondRel.columns()[sidx].Data.([]string)[i]) {
-                    join(firstRel, secondRel, result, j, i)
-                }
-            }
-        }
+    result := prepareJoinResult(resultName, firstRel, secondRel, fidx, sidx)
+    return setup {
+        firstRel: firstRel,
+        secondRel: secondRel,
+        result: result,
+        hash: hash,
+        hashTable: hashTable,
+        fidx: fidx,
+        sidx: sidx,
+        fsig: fsig,
+        ssig: ssig,
     }
-
-    return &result
 }
-
-func (cs *ColumnStore) IndexNestedLoopJoin(leftRelation string, leftColumn AttrInfo, rightRelation string, rightColumn AttrInfo) Relationer {
-    leftRel := cs.GetRelation(leftRelation)
-    rightRel := cs.GetRelation(rightRelation)
-    lidx := leftRel.findColumn(leftColumn)
-    ridx := rightRel.findColumn(rightColumn)
-    lsig := leftRel.columns()[lidx].Signature
-
-    if lsig.Type != rightRel.columns()[ridx].Signature.Type {
-        error_("Not matching types for Index nested loop join.")
-    }
-
-    rightRel.MakeIndex(rightColumn)
-
-    result := prepareJoinResult("IndexNestedLoopJoin", leftRel, rightRel, lidx, ridx)
-
-    for i := 0; i < leftRel.rowCount(); i++ {
-        var value interface{}
-        if lsig.Type == INT {
-            value = leftRel.columns()[lidx].Data.([]int)[i]
-        } else if lsig.Type == FLOAT {
-            value = leftRel.columns()[lidx].Data.([]float64)[i]
-        } else {
-            value = leftRel.columns()[lidx].Data.([]string)[i]
-        }
-        for _, row := range rightRel.columns()[ridx].IndexLookup(value) {
-            join(leftRel, rightRel, result, i, row)
-        }
-    } 
-
-    return &result
-}
-
-/*
--------------------------------------------------
-ColumnStore intern helper functions
--------------------------------------------------
-*/
 
 func createHashFunction(info AttrInfo) func(interface{}) int {
     switch info.Type {
