@@ -31,7 +31,6 @@ func (cs *ColumnStore) Load(csvFile string, separator rune) Relationer {
 	attrInfos := make([]AttrInfo, len(header))
 	for idx := range attrInfos { // set the column signatures
 		attrInfos[idx].Name = header[idx]
-		attrInfos[idx].Enc = NOCOMP
 		if allMatch(data, func(row []string) bool { return intRegex.Match([]byte(row[idx])) }) {
 			// every entry in this column is an interger
 			attrInfos[idx].Type = INT

@@ -15,18 +15,6 @@ const (
 )
 
 /*
-	The supported compression types of the Column Store.
-*/
-type Compression int
-
-const (
-	NOCOMP Compression = iota
-	RLE
-	DICT
-	FOR
-)
-
-/*
 	The supported data types of the Column Store.
 */
 type DataTypes int
@@ -43,7 +31,6 @@ const (
 type AttrInfo struct {
 	Name string
 	Type DataTypes
-	Enc  Compression
 }
 
 /*
