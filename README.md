@@ -1,12 +1,32 @@
-// TODO: Session 1 - Implement the Relationer and ColumnStorer interface by
-// using the given structs. Implement the methods in the core_impl.go file.
-// Implement Load, Scan, Select, Print, GetRawData, CreateRelation and GetRelation.
-
-// TODO: Session 2 - Implement HashJoin and Aggregate
-
-// TODO: Session 3 - Parallelisation and Acceleration
-
+# Usage
 To start the program:
 ```shell
 $ make run
 ```
+
+# Sessions
+## 1. Session 
+- Aufgabe 1
+    - ColumnStore.GetRealation
+- Aufgabe 2
+    - ColumnStore.Load
+- Aufgabe 3
+    - Relation.Print
+- Aufgabe 4
+    - Relation.Scan
+    - Relation.Select
+
+## 2. Session
+- Aufgabe 1
+    - ColumnStore.NestedLoopJoin
+- Aufgabe 2
+    - ColumnStore.HashJoin
+
+## 3. Session
+- Aufgabe 1
+    - Relation.MakeIndex
+    - Relation.IndexScan
+- Aufgabe 2
+    - ColumnStore.IndexNestedLoopJoin
+- Aufgabe 3
+    - ColumnStore.ParallelHashJoin
