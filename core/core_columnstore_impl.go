@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"sync"
 )
 
 func (cs *ColumnStore) Load(csvFile string, separator rune) Relationer {
@@ -206,9 +207,67 @@ func (cs *ColumnStore) HashJoin(leftRelation string, leftColumn AttrInfo, rightR
     return &s.result
 }
 
-func (cs *ColumnStore) ParallelHashJoin(leftRelation string, leftCol AttrInfo, rightRelation string, rightCol AttrInfo, comp Comparison) Relationer {
-    // s := cs.hashJoinSetup(leftRelation, leftCol, rightRelation, rightCol, "ParallelHashJoin")
-    return nil
+func (cs *ColumnStore) ParallelHashJoin(leftRelation string, leftColumn AttrInfo, rightRelation string, rightColumn AttrInfo, comp Comparison) Relationer {
+    s := cs.hashJoinSetup(leftRelation, leftColumn, rightRelation, rightColumn, "HashJoin")
+
+    type ij struct {
+        i int
+        j int
+    }
+    n := s.secondRel.rowCount()
+
+    rows := make(chan []ij, n)
+    defer close(rows)
+
+    wg := new(sync.WaitGroup)
+    wg.Add(n)
+
+    // Perform the join
+    for i := 0; i < s.secondRel.rowCount(); i++ {
+        go func(i int, wg *sync.WaitGroup) {
+            var hashed int
+            found := make([]ij, 0)
+
+            if s.ssig.Type == INT {
+                hashed = s.hash(s.secondRel.columns()[s.sidx].Data.([]int)[i])
+            } else if s.ssig.Type == FLOAT {
+                hashed = s.hash(s.secondRel.columns()[s.sidx].Data.([]float64)[i])
+            } else {
+                hashed = s.hash(s.secondRel.columns()[s.sidx].Data.([]string)[i])
+            }
+            hashed = abs(hashed % len(s.hashTable))
+            for _, j := range s.hashTable[hashed] {
+                if s.fsig.Type == INT {
+                    predicate := comparator(comp, s.firstRel.columns()[s.fidx].Data.([]int)[j])
+                    if predicate(s.secondRel.columns()[s.sidx].Data.([]int)[i]) {
+                        found = append(found, ij { i: i, j: j })
+                    }
+                } else if s.fsig.Type == FLOAT {
+                    predicate := comparator(comp, s.firstRel.columns()[s.fidx].Data.([]float64)[j])
+                    if predicate(s.secondRel.columns()[s.sidx].Data.([]float64)[i]) {
+                        found = append(found, ij { i: i, j: j })
+                    }
+                } else {
+                    predicate := comparator(comp, s.firstRel.columns()[s.fidx].Data.([]string)[j])
+                    if predicate(s.secondRel.columns()[s.sidx].Data.([]string)[i]) {
+                        found = append(found, ij { i: i, j: j })
+                    }
+                }
+            }
+
+            rows <- found
+            wg.Wait()
+        }(i, wg)
+    }
+
+    for i := 0; i < n; i++ {
+        for _, ij := range <- rows {
+            join(s.firstRel, s.secondRel, s.result, ij.j, ij.i)
+        }
+        wg.Done()
+    }
+
+    return &s.result
 }
 
 /*
