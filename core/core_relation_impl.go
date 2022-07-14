@@ -28,6 +28,30 @@ func (col *Column) IndexLookup(key interface{}) []int {
     return col.Index[key]
 }
 
+func (col *Column) isInt() bool {
+    return col.Signature.Type == INT
+}
+
+func (col *Column) isFloat() bool {
+    return col.Signature.Type == FLOAT
+}
+
+func (col *Column) isString() bool {
+    return col.Signature.Type == STRING
+}
+
+func (col *Column) intAt(i int) int {
+    return col.Data.([]int)[i]
+}
+
+func (col *Column) floatAt(i int) float64 {
+    return col.Data.([]float64)[i]
+}
+
+func (col *Column) stringAt(i int) string {
+    return col.Data.([]string)[i]
+}
+
 func (rel *Relation) Scan(colList []AttrInfo) Relationer {
 	var rs *Relation = new(Relation)
 
@@ -49,11 +73,11 @@ func (rel *Relation) Select(col AttrInfo, comp Comparison, compVal interface{}) 
 	rs := new(Relation)
 	rs.Name = "select from " + rel.Name
 	// gets the columns for the created relation
-	if rel.columns()[relevantCol].Signature.Type == INT {
+	if rel.columns()[relevantCol].isInt() {
 		rs.Columns = getRelevantRows(comp, asInt(compVal), rel.columns(), relevantCol)
-	} else if rel.columns()[relevantCol].Signature.Type == FLOAT {
+	} else if rel.columns()[relevantCol].isFloat() {
 		rs.Columns = getRelevantRows(comp, asFloat(compVal), rel.columns(), relevantCol)
-	} else if rel.columns()[relevantCol].Signature.Type == STRING {
+	} else if rel.columns()[relevantCol].isString() {
 		rs.Columns = getRelevantRows(comp, asString(compVal), rel.columns(), relevantCol)
 	} else {
 		return nil // unknown type
@@ -98,17 +122,16 @@ func (rel *Relation) MakeIndex(indexCol AttrInfo) Relationer {
         return rel
     }
 
-	colsig := rel.columns()[colIdx].Signature
 
     for i := 0; i < rel.rowCount(); i++ {
-		if colsig.Type == INT {
-            data := rel.Columns[colIdx].Data.([]int)[i]
+		if rel.columns()[colIdx].isInt() {
+            data := rel.Columns[colIdx].intAt(i)
             rel.Columns[colIdx].IndexInsert(data, i)
-		} else if colsig.Type == FLOAT {
-            data := rel.Columns[colIdx].Data.([]float64)[i]
+		} else if rel.columns()[colIdx].isFloat() {
+            data := rel.Columns[colIdx].floatAt(i)
             rel.Columns[colIdx].IndexInsert(data, i)
-		} else if colsig.Type == STRING {
-            data := rel.Columns[colIdx].Data.([]string)[i]
+		} else if rel.columns()[colIdx].isString() {
+            data := rel.Columns[colIdx].stringAt(i)
             rel.Columns[colIdx].IndexInsert(data, i)
 		}
     }
@@ -129,23 +152,23 @@ func (rel *Relation) IndexScan(col AttrInfo, key interface{}) Relationer {
     result.Columns = make([]Column, len(rel.Columns))
     for i := range result.Columns {
         result.Columns[i].Signature = rel.columns()[i].Signature
-        if result.Columns[i].Signature.Type == INT {
+        if result.Columns[i].isInt() {
             result.Columns[i].Data = make([]int, 0)
-        } else if result.Columns[i].Signature.Type == FLOAT {
+        } else if result.Columns[i].isFloat() {
             result.Columns[i].Data = make([]float64, 0)
-        } else if result.Columns[i].Signature.Type == STRING {
+        } else if result.Columns[i].isString() {
             result.Columns[i].Data = make([]string, 0)
         }
     }
 
     for _, rowIdx := range rel.Columns[colIdx].IndexLookup(key) {
         for i := 0; i < len(result.Columns); i++ {
-            if rel.columns()[i].Signature.Type == INT {
-                result.Columns[i].Data = append(result.Columns[i].Data.([]int), rel.Columns[i].Data.([]int)[rowIdx])
-            } else if rel.columns()[i].Signature.Type == FLOAT {
-                result.Columns[i].Data = append(result.Columns[i].Data.([]float64), rel.Columns[i].Data.([]float64)[rowIdx])
-            } else if rel.columns()[i].Signature.Type == STRING {
-                result.Columns[i].Data = append(result.Columns[i].Data.([]string), rel.Columns[i].Data.([]string)[rowIdx])
+            if rel.columns()[i].isInt() {
+                result.Columns[i].Data = append(result.Columns[i].Data.([]int), rel.Columns[i].intAt(rowIdx))
+            } else if rel.columns()[i].isFloat() {
+                result.Columns[i].Data = append(result.Columns[i].Data.([]float64), rel.Columns[i].floatAt(rowIdx))
+            } else if rel.columns()[i].isString() {
+                result.Columns[i].Data = append(result.Columns[i].Data.([]string), rel.Columns[i].stringAt(rowIdx))
             }
         }
     }
@@ -168,13 +191,16 @@ func (rel *Relation) findColumn(attr AttrInfo) int {
 }
 
 func (rel *Relation) rowCount() int {
-	if rel.Columns[0].Signature.Type == INT {
+	if rel.Columns[0].isInt() {
 		return len(rel.Columns[0].Data.([]int))
-	} else if rel.Columns[0].Signature.Type == FLOAT {
+	} else if rel.Columns[0].isFloat() {
 		return len(rel.Columns[0].Data.([]float64))
-	} else {
+	} else if rel.Columns[0].isString() {
 		return len(rel.Columns[0].Data.([]string))
-	}
+	} else {
+        error_("Unknown or unset column type.")
+        return -1 // Dead code ...
+    }
 }
 
 /*
@@ -211,14 +237,15 @@ func (rel *Relation) getRows() []table.Row {
 		row := make(table.Row, col_nums)
 		// iterate over each column and get the entry at the current row
 		for j, col := range rel.Columns {
-			if col.Signature.Type == INT {
-				row[j] = col.Data.([]int)[i]
-			} else if col.Signature.Type == FLOAT {
-				row[j] = col.Data.([]float64)[i]
+			if col.isInt() {
+				row[j] = col.intAt(i)
+			} else if col.isFloat() {
+				row[j] = col.floatAt(i)
+			} else if col.isString() {
+				row[j] = col.stringAt(i)
 			} else {
-				row[j] = col.Data.([]string)[i]
-			}
-
+                error_("Unknown or unset column type.")
+            }
 		}
 		rows[i] = row
 	}

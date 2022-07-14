@@ -53,13 +53,15 @@ func getRelevantRows[T int | string | float64](comp Comparison, cmpVal T, cols [
 		if comparator(elm) {
 			// if so -> copy the data inside this row
 			for col_idx, column := range cols {
-				if column.Signature.Type == INT {
-					resultCols[col_idx].Data = append(resultCols[col_idx].Data.([]int), column.Data.([]int)[row])
-				} else if column.Signature.Type == STRING {
-					resultCols[col_idx].Data = append(resultCols[col_idx].Data.([]string), column.Data.([]string)[row])
-				} else if column.Signature.Type == FLOAT {
-					resultCols[col_idx].Data = append(resultCols[col_idx].Data.([]float64), column.Data.([]float64)[row])
-				}
+				if column.isInt() {
+					resultCols[col_idx].Data = append(resultCols[col_idx].Data.([]int), column.intAt(row))
+				} else if column.isFloat() {
+					resultCols[col_idx].Data = append(resultCols[col_idx].Data.([]float64), column.floatAt(row))
+				} else if column.isString() {
+					resultCols[col_idx].Data = append(resultCols[col_idx].Data.([]string), column.stringAt(row))
+				} else {
+                    error_("Unknown or unset column type.")
+                }
 			}
 		}
 	}

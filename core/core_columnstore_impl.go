@@ -53,17 +53,19 @@ func (cs *ColumnStore) Load(csvFile string, separator rune) Relationer {
 
 		// store column data
 		for rowIdx, row := range data {
-			if col.Signature.Type == INT {
+			if col.isInt() {
 				val, err := strconv.Atoi(row[colIdx])
 				checkError(err)
 				rel.columns()[colIdx].Data.([]int)[rowIdx] = val
-			} else if col.Signature.Type == FLOAT {
+			} else if col.isFloat() {
 				val, err := strconv.ParseFloat(row[colIdx], 64)
 				checkError(err)
 				rel.columns()[colIdx].Data.([]float64)[rowIdx] = val
-			} else {
+			} else if col.isString() {
 				rel.columns()[colIdx].Data.([]string)[rowIdx] = row[colIdx]
-			}
+			} else {
+                error_("Unknown or unset column type.")
+            }
 		}
 	}
 
@@ -106,9 +108,9 @@ func (cs *ColumnStore) NestedLoopJoin(leftRelation string, leftColumn AttrInfo, 
     rightRel := cs.GetRelation(rightRelation)
     lidx := leftRel.findColumn(leftColumn)
     ridx := rightRel.findColumn(rightColumn)
-    lsig := leftRel.columns()[lidx].Signature
+    lcol := leftRel.columns()[lidx]
 
-    if lsig.Type != rightRel.columns()[ridx].Signature.Type {
+    if lcol.Signature.Type != rightRel.columns()[ridx].Signature.Type {
         error_("Not matching types for nested loop join.")
     }
 
@@ -117,19 +119,21 @@ func (cs *ColumnStore) NestedLoopJoin(leftRelation string, leftColumn AttrInfo, 
     // Perform the join
     for i := 0; i < leftRel.rowCount(); i++ {
         var predicate interface{}
-        if lsig.Type == INT {
-            predicate = comparator(comp, leftRel.columns()[lidx].Data.([]int)[i])
-        } else if lsig.Type == FLOAT {
-            predicate = comparator(comp, leftRel.columns()[lidx].Data.([]float64)[i])
+        if lcol.isInt() {
+            predicate = comparator(comp, lcol.intAt(i))
+        } else if lcol.isFloat() {
+            predicate = comparator(comp, lcol.floatAt(i))
+        } else if lcol.isString() {
+            predicate = comparator(comp, lcol.stringAt(i))
         } else {
-            predicate = comparator(comp, leftRel.columns()[lidx].Data.([]string)[i])
+            error_("Unknown or unset column type.")
         }
         for j := 0; j < rightRel.rowCount(); j++ {
-            if lsig.Type == INT && predicate.(func(int) bool)(rightRel.columns()[ridx].Data.([]int)[j]) {
+            if lcol.isInt() && predicate.(func(int) bool)(rightRel.columns()[ridx].intAt(j)) {
                 join(leftRel, rightRel, result, i, j)
-            } else if lsig.Type == FLOAT && predicate.(func(float64) bool)(rightRel.columns()[ridx].Data.([]float64)[j]) {
+            } else if lcol.isFloat() && predicate.(func(float64) bool)(rightRel.columns()[ridx].floatAt(j)) {
                 join(leftRel, rightRel, result, i, j)
-            } else if lsig.Type == STRING && predicate.(func(string) bool)(rightRel.columns()[ridx].Data.([]string)[j]) {
+            } else if lcol.isString() && predicate.(func(string) bool)(rightRel.columns()[ridx].stringAt(j)) {
                 join(leftRel, rightRel, result, i, j)
             }
         }
@@ -143,9 +147,9 @@ func (cs *ColumnStore) IndexNestedLoopJoin(leftRelation string, leftColumn AttrI
     rightRel := cs.GetRelation(rightRelation)
     lidx := leftRel.findColumn(leftColumn)
     ridx := rightRel.findColumn(rightColumn)
-    lsig := leftRel.columns()[lidx].Signature
+    lcol := leftRel.columns()[lidx]
 
-    if lsig.Type != rightRel.columns()[ridx].Signature.Type {
+    if lcol.Signature.Type != rightRel.columns()[ridx].Signature.Type {
         error_("Not matching types for Index nested loop join.")
     }
 
@@ -155,12 +159,14 @@ func (cs *ColumnStore) IndexNestedLoopJoin(leftRelation string, leftColumn AttrI
 
     for i := 0; i < leftRel.rowCount(); i++ {
         var value interface{}
-        if lsig.Type == INT {
-            value = leftRel.columns()[lidx].Data.([]int)[i]
-        } else if lsig.Type == FLOAT {
-            value = leftRel.columns()[lidx].Data.([]float64)[i]
+        if lcol.isInt() {
+            value = lcol.intAt(i)
+        } else if lcol.isFloat() {
+            value = lcol.floatAt(i)
+        } else if lcol.isString() {
+            value = lcol.stringAt(i)
         } else {
-            value = leftRel.columns()[lidx].Data.([]string)[i]
+            error_("Unknown or unset column type.")
         }
         for _, row := range rightRel.columns()[ridx].IndexLookup(value) {
             join(leftRel, rightRel, result, i, row)
@@ -176,30 +182,34 @@ func (cs *ColumnStore) HashJoin(leftRelation string, leftColumn AttrInfo, rightR
     // Perform the join
     for i := 0; i < s.secondRel.rowCount(); i++ {
         var hashed int
-        if s.ssig.Type == INT {
-            hashed = s.hash(s.secondRel.columns()[s.sidx].Data.([]int)[i])
-        } else if s.ssig.Type == FLOAT {
-            hashed = s.hash(s.secondRel.columns()[s.sidx].Data.([]float64)[i])
+        if s.scol.isInt() {
+            hashed = s.hash(s.scol.intAt(i))
+        } else if s.scol.isFloat() {
+            hashed = s.hash(s.scol.floatAt(i))
+        } else if s.scol.isString() {
+            hashed = s.hash(s.scol.stringAt(i))
         } else {
-            hashed = s.hash(s.secondRel.columns()[s.sidx].Data.([]string)[i])
+            error_("Unknown or unset column type.")
         }
         hashed = abs(hashed % len(s.hashTable))
         for _, j := range s.hashTable[hashed] {
-            if s.fsig.Type == INT {
-                predicate := comparator(comp, s.firstRel.columns()[s.fidx].Data.([]int)[j])
-                if predicate(s.secondRel.columns()[s.sidx].Data.([]int)[i]) {
+            if s.fcol.isInt() {
+                predicate := comparator(comp, s.fcol.intAt(j))
+                if predicate(s.scol.intAt(i)) {
                     join(s.firstRel, s.secondRel, s.result, j, i)
                 }
-            } else if s.fsig.Type == FLOAT {
-                predicate := comparator(comp, s.firstRel.columns()[s.fidx].Data.([]float64)[j])
-                if predicate(s.secondRel.columns()[s.sidx].Data.([]float64)[i]) {
+            } else if s.fcol.isFloat() {
+                predicate := comparator(comp, s.scol.floatAt(j))
+                if predicate(s.scol.floatAt(i)) {
+                    join(s.firstRel, s.secondRel, s.result, j, i)
+                }
+            } else if s.fcol.isString() {
+                predicate := comparator(comp, s.fcol.stringAt(j))
+                if predicate(s.scol.stringAt(i)) {
                     join(s.firstRel, s.secondRel, s.result, j, i)
                 }
             } else {
-                predicate := comparator(comp, s.firstRel.columns()[s.fidx].Data.([]string)[j])
-                if predicate(s.secondRel.columns()[s.sidx].Data.([]string)[i]) {
-                    join(s.firstRel, s.secondRel, s.result, j, i)
-                }
+                error_("Unknown or unset column type.")
             }
         }
     }
@@ -228,30 +238,34 @@ func (cs *ColumnStore) ParallelHashJoin(leftRelation string, leftColumn AttrInfo
             var hashed int
             found := make([]ij, 0)
 
-            if s.ssig.Type == INT {
-                hashed = s.hash(s.secondRel.columns()[s.sidx].Data.([]int)[i])
-            } else if s.ssig.Type == FLOAT {
-                hashed = s.hash(s.secondRel.columns()[s.sidx].Data.([]float64)[i])
+            if s.scol.isInt() {
+                hashed = s.hash(s.scol.intAt(i))
+            } else if s.scol.isFloat() {
+                hashed = s.hash(s.scol.floatAt(i))
+            } else if s.scol.isString() {
+                hashed = s.hash(s.scol.stringAt(i))
             } else {
-                hashed = s.hash(s.secondRel.columns()[s.sidx].Data.([]string)[i])
+                error_("Unknown or unset column type.")
             }
             hashed = abs(hashed % len(s.hashTable))
             for _, j := range s.hashTable[hashed] {
-                if s.fsig.Type == INT {
-                    predicate := comparator(comp, s.firstRel.columns()[s.fidx].Data.([]int)[j])
-                    if predicate(s.secondRel.columns()[s.sidx].Data.([]int)[i]) {
+                if s.fcol.isInt() {
+                    predicate := comparator(comp, s.fcol.intAt(j))
+                    if predicate(s.scol.intAt(i)) {
                         found = append(found, ij { i: i, j: j })
                     }
-                } else if s.fsig.Type == FLOAT {
-                    predicate := comparator(comp, s.firstRel.columns()[s.fidx].Data.([]float64)[j])
-                    if predicate(s.secondRel.columns()[s.sidx].Data.([]float64)[i]) {
+                } else if s.fcol.isFloat() {
+                    predicate := comparator(comp, s.scol.floatAt(j))
+                    if predicate(s.scol.floatAt(i)) {
+                        found = append(found, ij { i: i, j: j })
+                    }
+                } else if s.fcol.isString() {
+                    predicate := comparator(comp, s.fcol.stringAt(j))
+                    if predicate(s.scol.stringAt(i)) {
                         found = append(found, ij { i: i, j: j })
                     }
                 } else {
-                    predicate := comparator(comp, s.firstRel.columns()[s.fidx].Data.([]string)[j])
-                    if predicate(s.secondRel.columns()[s.sidx].Data.([]string)[i]) {
-                        found = append(found, ij { i: i, j: j })
-                    }
+                    error_("Unknown or unset column type.")
                 }
             }
 
@@ -282,10 +296,8 @@ type setup struct {
     result      Relation
     hash        func(interface{}) int
     hashTable   [][]int
-    fidx        int
-    sidx        int
-    fsig        AttrInfo
-    ssig        AttrInfo
+    fcol        Column
+    scol        Column
 }
 
 func (cs *ColumnStore) hashJoinSetup(leftRelation string, leftColumn AttrInfo, rightRelation string, rightColumn AttrInfo, resultName string) setup {
@@ -294,36 +306,40 @@ func (cs *ColumnStore) hashJoinSetup(leftRelation string, leftColumn AttrInfo, r
     rightRel := cs.GetRelation(rightRelation)
     lidx := leftRel.findColumn(leftColumn)
     ridx := rightRel.findColumn(rightColumn)
+    lcol := leftRel.columns()[lidx]
+    rcol := rightRel.columns()[ridx]
 
-    if leftRel.columns()[lidx].Signature.Type != rightRel.columns()[ridx].Signature.Type {
+    if lcol.Signature.Type != rcol.Signature.Type {
         error_("Not matching types for hash join.")
     }
 
     // Get the smaller relation
     var firstRel, secondRel Relationer
     var fidx, sidx int
-    var fsig, ssig AttrInfo
+    var fcol, scol Column
     if leftRel.rowCount() < rightRel.rowCount() {
         firstRel, secondRel = leftRel, rightRel
         fidx, sidx = lidx, ridx
-        fsig, ssig = leftRel.columns()[lidx].Signature, rightRel.columns()[ridx].Signature
+        fcol, scol = lcol, rcol
     } else {
         firstRel, secondRel = rightRel, leftRel
         fidx, sidx = ridx, lidx
-        fsig, ssig = rightRel.columns()[ridx].Signature, leftRel.columns()[lidx].Signature
+        fcol, scol = rcol, lcol
     }
 
     // create the hash table, the length should be done differently
     var hashTable = make([][]int, firstRel.rowCount())
-    hash := createHashFunction(fsig)
+    hash := createHashFunction(fcol.Signature)
     for i := 0; i < firstRel.rowCount(); i++ {
         var hashed int
-        if fsig.Type == INT {
-            hashed = hash(firstRel.columns()[fidx].Data.([]int)[i])
-        } else if fsig.Type == FLOAT {
-            hashed = hash(firstRel.columns()[fidx].Data.([]float64)[i])
+        if fcol.isInt() {
+            hashed = hash(fcol.intAt(i))
+        } else if fcol.isFloat() {
+            hashed = hash(fcol.floatAt(i))
+        } else if fcol.isString() {
+            hashed = hash(fcol.stringAt(i))
         } else {
-            hashed = hash(firstRel.columns()[fidx].Data.([]string)[i])
+            error_("Unknown or unset column type.")
         }
         hashed = abs(hashed % len(hashTable))
         hashTable[hashed] = append(hashTable[hashed], i)
@@ -336,10 +352,8 @@ func (cs *ColumnStore) hashJoinSetup(leftRelation string, leftColumn AttrInfo, r
         result: result,
         hash: hash,
         hashTable: hashTable,
-        fidx: fidx,
-        sidx: sidx,
-        fsig: fsig,
-        ssig: ssig,
+        fcol: fcol,
+        scol: scol,
     }
 }
 
@@ -382,12 +396,14 @@ func prepareJoinResult(name string, first, second Relationer, fidx, sidx int) Re
                 result.Columns[i].Signature.Name += " (second)"
             }
         }
-        if result.Columns[i].Signature.Type == INT {
+        if result.Columns[i].isInt() {
             result.Columns[i].Data = make([]int, 0)
-        } else if result.Columns[i].Signature.Type == FLOAT {
+        } else if result.Columns[i].isFloat() {
             result.Columns[i].Data = make([]float64, 0)
-        } else {
+        } else if result.Columns[i].isString() {
             result.Columns[i].Data = make([]string, 0)
+        } else {
+            error_("Unknown or unset column type.")
         }
     }
 
@@ -397,21 +413,25 @@ func prepareJoinResult(name string, first, second Relationer, fidx, sidx int) Re
 func join(firstRel, secondRel Relationer, result Relation, firstIndex, secondIndex int) {
     for i := 0; i < len(result.Columns); i++ {
         if i < len(firstRel.columns()) {
-            if result.Columns[i].Signature.Type == INT {
-                result.Columns[i].Data = append(result.Columns[i].Data.([]int), firstRel.columns()[i].Data.([]int)[firstIndex])
-            } else if result.Columns[i].Signature.Type == FLOAT {
-                result.Columns[i].Data = append(result.Columns[i].Data.([]float64), firstRel.columns()[i].Data.([]float64)[firstIndex])
+            if result.Columns[i].isInt() {
+                result.Columns[i].Data = append(result.Columns[i].Data.([]int), firstRel.columns()[i].intAt(firstIndex))
+            } else if result.Columns[i].isFloat() {
+                result.Columns[i].Data = append(result.Columns[i].Data.([]float64), firstRel.columns()[i].floatAt(firstIndex))
+            } else if result.Columns[i].isString() {
+                result.Columns[i].Data = append(result.Columns[i].Data.([]string), firstRel.columns()[i].stringAt(firstIndex))
             } else {
-                result.Columns[i].Data = append(result.Columns[i].Data.([]string), firstRel.columns()[i].Data.([]string)[firstIndex])
+                error_("Unknown or unset column type.")
             }
         } else {
             i2 := i - len(firstRel.columns())
-            if result.Columns[i].Signature.Type == INT {
-                result.Columns[i].Data = append(result.Columns[i].Data.([]int), secondRel.columns()[i2].Data.([]int)[secondIndex])
-            } else if result.Columns[i].Signature.Type == FLOAT {
-                result.Columns[i].Data = append(result.Columns[i].Data.([]float64), secondRel.columns()[i2].Data.([]float64)[secondIndex])
+            if result.Columns[i].isInt() {
+                result.Columns[i].Data = append(result.Columns[i].Data.([]int), secondRel.columns()[i2].intAt(secondIndex))
+            } else if result.Columns[i].isFloat() {
+                result.Columns[i].Data = append(result.Columns[i].Data.([]float64), secondRel.columns()[i2].floatAt(secondIndex))
+            } else if result.Columns[i].isString() {
+                result.Columns[i].Data = append(result.Columns[i].Data.([]string), secondRel.columns()[i2].stringAt(secondIndex))
             } else {
-                result.Columns[i].Data = append(result.Columns[i].Data.([]string), secondRel.columns()[i2].Data.([]string)[secondIndex])
+                error_("Unknown or unset column type.")
             }
         }
     }
