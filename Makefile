@@ -6,5 +6,9 @@ run:
 	@echo ""
 	./ColumnStore
 
+bench:
+	go mod tidy
+	go test -bench=. -benchtime=1000000x
+
 clean:
 	rm ColumnStore
